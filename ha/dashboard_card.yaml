@@ -1,0 +1,51 @@
+# 儀表板卡片（Sections 視圖的一個 grid section）。
+# 在儀表板「編輯 → 原始設定編輯器」把這段貼進某個 view 的 sections: 底下。
+type: grid
+cards:
+  - type: heading
+    heading: TV time
+    icon: mdi:timer-sand
+  - type: tile
+    entity: sensor.tv_remaining_min
+    name: Remaining today
+    icon: mdi:timer-sand
+    color: orange
+    grid_options: { columns: 6 }
+  - type: tile
+    entity: binary_sensor.tv_counting
+    name: Counting
+    grid_options: { columns: 6 }
+  - type: tile
+    entity: input_boolean.tv_parent_mode
+    name: Parent mode (no limit, auto-off after 2h)
+    icon: mdi:shield-account
+    color: green
+    grid_options: { columns: 12 }
+  - type: tile
+    entity: input_number.tv_daily_limit_min
+    name: Daily limit
+    grid_options: { columns: 6 }
+  - type: tile
+    entity: input_number.tv_bonus_min
+    name: Bonus today
+    grid_options: { columns: 6 }
+  - type: button
+    name: "+15 min"
+    icon: mdi:timer-plus-outline
+    show_name: true
+    show_icon: true
+    tap_action:
+      action: perform-action
+      perform_action: script.turn_on
+      target: { entity_id: script.tv_bonus_15 }
+    grid_options: { columns: 6, rows: 1 }
+  - type: button
+    name: "+30 min"
+    icon: mdi:timer-plus-outline
+    show_name: true
+    show_icon: true
+    tap_action:
+      action: perform-action
+      perform_action: script.turn_on
+      target: { entity_id: script.tv_bonus_30 }
+    grid_options: { columns: 6, rows: 1 }

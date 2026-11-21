@@ -1,0 +1,208 @@
+# TV Time Guard — Home Assistant package
+# 使用前：把下面「◆ 要替換」的四個名稱換成你自己的（編輯器用全部取代最快）。
+#
+#   ◆ media_player.living_room_tv        Android TV Remote 整合的 media_player（用來判斷電視開著）
+#   ◆ remote.living_room_tv              同一個整合的 remote（送 HOME、關機、暫停按鍵）
+#   ◆ media_player.living_room_tv_adb    Android Debug Bridge 整合的 media_player（用來下 adb shell 指令）
+#   ◆ notify.mobile_app_parent_phone     家長手機的通知服務（HA Companion App）
+#
+# 安裝：configuration.yaml 加上
+#   homeassistant:
+#     packages: !include_dir_named packages
+# 再把本檔放到 /config/packages/tv_time_guard.yaml，重啟 HA。
+# 完成後到「設定 → 裝置與服務 → 輔助工具」把「TV daily limit」設成你要的分鐘數（例如 90）。
+
+input_boolean:
+  tv_parent_mode:
+    name: TV parent mode
+    icon: mdi:shield-account
+
+input_number:
+  tv_daily_limit_min:        # 每日額度（分鐘）。注意：不要設 initial，否則每次重啟都會被重設。
+    name: TV daily limit
+    icon: mdi:timer-sand
+    min: 0
+    max: 480
+    step: 5
+    mode: box
+    unit_of_measurement: min
+  tv_bonus_min:              # 今日加時（分鐘），每天午夜歸零
+    name: TV bonus today
+    icon: mdi:timer-plus
+    min: 0
+    max: 480
+    step: 5
+    mode: box
+    unit_of_measurement: min
+
+template:
+  - binary_sensor:
+      - name: TV counting
+        unique_id: tv_time_guard_counting
+        # 電視開著，而且家長模式關閉 → 計時中
+        state: >-
+          {{ not is_state('media_player.living_room_tv', ['off', 'unavailable', 'unknown', 'standby'])
+             and is_state('input_boolean.tv_parent_mode', 'off') }}
+  - sensor:
+      - name: TV remaining min
+        unique_id: tv_time_guard_remaining
+        unit_of_measurement: min
+        state_class: measurement
+        # history_stats 約每分鐘才更新一次，所以把「距離上次更新過了多久」補上去，倒數才不會往回跳。
+        state: >-
+          {% set x = ((now() - states['sensor.tv_used_today'].last_updated).total_seconds() / 60)
+                     if is_state('binary_sensor.tv_counting', 'on') else 0 %}
+          {{ [ states('input_number.tv_daily_limit_min') | float(0)
+               + states('input_number.tv_bonus_min') | float(0)
+               - states('sensor.tv_used_today') | float(0) * 60
+               - ([x, 2] | min), 0 ] | max | round(2) }}
+
+sensor:
+  - platform: history_stats
+    name: TV used today          # 單位：小時
+    entity_id: binary_sensor.tv_counting
+    state: "on"
+    type: time
+    start: "{{ today_at('00:00') }}"
+    end: "{{ now() }}"
+
+script:
+  tv_bonus_15:
+    alias: TV bonus +15 min
+    icon: mdi:timer-plus-outline
+    sequence:
+      - action: input_number.set_value
+        target: { entity_id: input_number.tv_bonus_min }
+        data:
+          value: "{{ [ states('input_number.tv_bonus_min') | float(0) + 15, 480 ] | min }}"
+  tv_bonus_30:
+    alias: TV bonus +30 min
+    icon: mdi:timer-plus-outline
+    sequence:
+      - action: input_number.set_value
+        target: { entity_id: input_number.tv_bonus_min }
+        data:
+          value: "{{ [ states('input_number.tv_bonus_min') | float(0) + 30, 480 ] | min }}"
+
+automation:
+  # 1) 剩 5 分鐘：暫停播放一次，並通知家長
+  - id: tv_guard_warn
+    alias: TV guard - 5 minute warning
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.tv_remaining_min
+        below: 5.01
+        above: 0
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.tv_counting
+        state: "on"
+    actions:
+      - action: remote.send_command
+        target: { entity_id: remote.living_room_tv }
+        data: { command: MEDIA_PAUSE }
+      - action: notify.mobile_app_parent_phone
+        data:
+          title: "📺 TV time almost up"
+          message: "5 minutes left"
+
+  # 2) 額度用完：每 10 秒檢查一次，回首頁再關機（之後再開機也會很快又被關）
+  - id: tv_guard_cutoff
+    alias: TV guard - cut off when time is up
+    triggers:
+      - trigger: time_pattern
+        seconds: "/10"
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.tv_counting
+        state: "on"
+      - condition: template
+        value_template: >-
+          {% set x = ((now() - states['sensor.tv_used_today'].last_updated).total_seconds() / 60) %}
+          {{ states('input_number.tv_daily_limit_min') | float(0)
+             + states('input_number.tv_bonus_min') | float(0)
+             - states('sensor.tv_used_today') | float(0) * 60
+             - ([x, 2] | min) <= 0 }}
+    actions:
+      - action: remote.send_command
+        target: { entity_id: remote.living_room_tv }
+        data: { command: HOME }
+      - delay: "00:00:03"
+      - action: remote.turn_off
+        target: { entity_id: remote.living_room_tv }
+      - action: notify.mobile_app_parent_phone
+        data:
+          title: "📺 TV turned off"
+          message: "Daily limit reached. Turn on 'TV parent mode' or add bonus time to continue."
+
+  # 3) 剩 10 分鐘內，在電視右上角顯示倒數（由電視上的 tv-countdown App 畫出）
+  - id: tv_guard_overlay
+    alias: TV guard - on-screen countdown
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: [sensor.tv_remaining_min, binary_sensor.tv_counting]
+      - trigger: time_pattern
+        minutes: "/1"
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.tv_counting
+                state: "on"
+              - condition: numeric_state
+                entity_id: sensor.tv_remaining_min
+                below: 10.01
+                above: 0
+            sequence:
+              - action: androidtv.adb_command
+                target: { entity_id: media_player.living_room_tv_adb }
+                data:
+                  command: >-
+                    am start-foreground-service -n io.github.ilshang2.tvcountdown/.OverlayService
+                    -a SHOW --ei seconds {{ ((states('sensor.tv_remaining_min') | float(0)) * 60) | round(0) | int }}
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.tv_counting
+                state: "on"
+              - condition: numeric_state
+                entity_id: sensor.tv_remaining_min
+                below: 0.01
+            sequence:
+              - action: androidtv.adb_command
+                target: { entity_id: media_player.living_room_tv_adb }
+                data:
+                  command: >-
+                    am start-foreground-service -n io.github.ilshang2.tvcountdown/.OverlayService
+                    -a SHOW --ei seconds 10 --es label 即將關機
+        default:
+          # 每分鐘的定時觸發不送隱藏指令（電視關機時 ADB 會離線，避免產生錯誤）
+          - condition: template
+            value_template: "{{ trigger.platform != 'time_pattern' }}"
+          - action: androidtv.adb_command
+            target: { entity_id: media_player.living_room_tv_adb }
+            data:
+              command: am start-foreground-service -n io.github.ilshang2.tvcountdown/.OverlayService -a HIDE
+
+  # 4) 午夜把今日加時歸零
+  - id: tv_guard_bonus_reset
+    alias: TV guard - reset bonus at midnight
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+    actions:
+      - action: input_number.set_value
+        target: { entity_id: input_number.tv_bonus_min }
+        data: { value: 0 }
+
+  # 5) 家長模式開著超過 2 小時自動關閉，避免忘記關
+  - id: tv_guard_parent_mode_expire
+    alias: TV guard - parent mode auto-off after 2h
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.tv_parent_mode
+        to: "on"
+        for: "02:00:00"
+    actions:
+      - action: input_boolean.turn_off
+        target: { entity_id: input_boolean.tv_parent_mode }
