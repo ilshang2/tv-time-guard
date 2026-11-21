@@ -7,7 +7,7 @@
 
 ![示範動畫](docs/demo.gif)
 
-[![在 YouTube 觀看（含聲音以外的完整畫質）](https://img.youtube.com/vi/ytwodW2-F0M/hqdefault.jpg)](https://youtu.be/ytwodW2-F0M)
+[![在 YouTube 觀看示範影片](https://img.youtube.com/vi/ytwodW2-F0M/hqdefault.jpg)](https://youtu.be/ytwodW2-F0M)
 
 **▶ [在 YouTube 觀看高畫質版](https://youtu.be/ytwodW2-F0M)**（約 29 秒）｜[下載 1080p mp4](docs/demo.mp4)
 
