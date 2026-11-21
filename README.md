@@ -7,7 +7,9 @@
 
 ![示範動畫](docs/demo.gif)
 
-高畫質版（1080p mp4，約 28 秒）：[docs/demo.mp4](docs/demo.mp4)
+[![在 YouTube 觀看（含聲音以外的完整畫質）](https://img.youtube.com/vi/ytwodW2-F0M/hqdefault.jpg)](https://youtu.be/ytwodW2-F0M)
+
+**▶ [在 YouTube 觀看高畫質版](https://youtu.be/ytwodW2-F0M)**（約 29 秒）｜[下載 1080p mp4](docs/demo.mp4)
 
 ## 它做什麼
 
