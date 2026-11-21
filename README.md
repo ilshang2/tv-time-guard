@@ -5,9 +5,9 @@
 
 **English summary:** A local-only parental time limit for Android TV. Home Assistant tracks daily TV-on time (`history_stats`), a tiny Android app draws a countdown overlay in the last 10 minutes (triggered over ADB), and HA turns the TV off when the quota is used up. Parents add time or switch on "parent mode" from the HA mobile app. No cloud, no account.
 
-<video src="docs/demo.mp4" controls width="720"></video>
+![示範動畫](docs/demo.gif)
 
-示範影片：[docs/demo.mp4](docs/demo.mp4)（約 28 秒）
+高畫質版（1080p mp4，約 28 秒）：[docs/demo.mp4](docs/demo.mp4)
 
 ## 它做什麼
 
